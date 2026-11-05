@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Wobbledogs</title>
+<style>
+html, body {margin: 0; padding: 0; height: 100%; background: #111111; color: #ffffff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; overflow: hidden;}
+#unityContainer {position: fixed; inset: 0; width: 100%; height: 100%;}
+#loading {position: fixed; inset: 0; background: #111111; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;}
+#title {font-size: 52px; font-weight: 600; margin-bottom: 24px;}
+#barTrack {width: 320px; height: 6px; background: #2a2a2a; border-radius: 3px; overflow: hidden;}
+#barFill {height: 100%; width: 0%; background: #f5a623;}
+#percent {margin-top: 12px; font-size: 14px; font-weight: 400;}
+#status {margin-top: 4px; font-size: 14px; font-weight: 400; color: #aaaaaa;}
+#fsBtn {position: fixed; top: 12px; right: 12px; width: 36px; height: 36px; background: #222222; border: 1px solid #444444; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20; padding: 0;}
+#fsBtn:hover {background: #2a2a2a;}
+</style>
+<script>
+const BASE = "https://cdn.jsdelivr.net/gh/reeyuki/wobbledogs@main/";
+const ASSETS = [["Build/game.data.unityweb", 27], ["Build/game.wasm.code.unityweb", 4]];
+const originalFetch = window.fetch.bind(window);
+const OriginalXHR = window.XMLHttpRequest;
+const assetMap = new Map();
+function normalize(u) { return new URL(u, location.href).href; }
+const totalChunks = ASSETS.reduce(function(a, b) { return a + b[1]; }, 0);
+let loadedChunks = 0;
+function setProgress(frac, text) {
+  const fill = document.getElementById("barFill");
+  if (!fill) return;
+  fill.style.width = (frac * 100) + "%";
+  const percent = document.getElementById("percent");
+  if (percent) percent.textContent = Math.round(frac * 100) + "%";
+  if (text) {
+    const status = document.getElementById("status");
+    if (status) status.textContent = text;
+  }
+}
+function hideLoading() {
+  const el = document.getElementById("loading");
+  if (el) el.style.display = "none";
+}
+window.fetch = async function(input, init) {
+  const url = typeof input === "string" ? input : (input && input.url);
+  const entry = assetMap.get(normalize(url));
+  if (entry) {
+    const buf = await entry;
+    return new Response(buf.slice(0), {status: 200, statusText: "OK", headers: {"Content-Type": "application/octet-stream", "Content-Length": String(buf.byteLength)}});
+  }
+  return originalFetch(input, init);
+};
+function XHRWrapper() {
+  let real = null;
+  let intercepted = false;
+  let url = null;
+  const listeners = {};
+  const state = {readyState: 0, status: 0, statusText: "", response: null, responseText: "", responseType: ""};
+  let _onload = null;
+  let _onerror = null;
+  let _onprogress = null;
+  const api = {};
+  Object.defineProperty(api, "readyState", {get: function() { return real ? real.readyState : state.readyState; }, set: function(v) { if (real) real.readyState = v; else state.readyState = v; }});
+  Object.defineProperty(api, "status", {get: function() { return real ? real.status : state.status; }, set: function(v) { if (real) real.status = v; else state.status = v; }});
+  Object.defineProperty(api, "statusText", {get: function() { return real ? real.statusText : state.statusText; }, set: function(v) { if (real) real.statusText = v; else state.statusText = v; }});
+  Object.defineProperty(api, "response", {get: function() { return real ? real.response : state.response; }, set: function(v) { if (real) real.response = v; else state.response = v; }});
+  Object.defineProperty(api, "responseText", {get: function() { return real ? real.responseText : state.responseText; }, set: function(v) { if (real) real.responseText = v; else state.responseText = v; }});
+  Object.defineProperty(api, "responseType", {get: function() { return real ? real.responseType : state.responseType; }, set: function(v) { state.responseType = v; if (real) real.responseType = v; }});
+  Object.defineProperty(api, "onload", {get: function() { return real ? real.onload : _onload; }, set: function(v) { _onload = v; if (real) real.onload = v; }});
+  Object.defineProperty(api, "onerror", {get: function() { return real ? real.onerror : _onerror; }, set: function(v) { _onerror = v; if (real) real.onerror = v; }});
+  Object.defineProperty(api, "onprogress", {get: function() { return real ? real.onprogress : _onprogress; }, set: function(v) { _onprogress = v; if (real) real.onprogress = v; }});
+  api.open = function(method, u) {
+    url = u;
+    intercepted = assetMap.has(normalize(u));
+    if (!intercepted) {
+      real = new OriginalXHR();
+      real.responseType = state.responseType;
+      real.onload = _onload;
+      real.onerror = _onerror;
+      real.onprogress = _onprogress;
+      return real.open.apply(real, arguments);
+    }
+    state.readyState = 1;
+    return undefined;
+  };
+  api.setRequestHeader = function() { if (real) return real.setRequestHeader.apply(real, arguments); };
+  api.addEventListener = function(type, cb) {
+    if (real && !intercepted) return real.addEventListener(type, cb);
+    if (!listeners[type]) listeners[type] = [];
+    listeners[type].push(cb);
+  };
+  api.removeEventListener = function(type, cb) {
+    if (real && !intercepted) return real.removeEventListener(type, cb);
+    if (listeners[type]) listeners[type] = listeners[type].filter(function(x) { return x !== cb; });
+  };
+  api.send = function(body) {
+    if (!intercepted) return real.send(body);
+    (async function() {
+      const buf = await assetMap.get(normalize(url));
+      if (state.responseType === "text") {
+        state.response = new TextDecoder().decode(buf);
+        state.responseText = state.response;
+      } else if (state.responseType === "json") {
+        const t = new TextDecoder().decode(buf);
+        state.response = JSON.parse(t);
+        state.responseText = t;
+      } else {
+        state.response = buf;
+        state.responseText = "";
+      }
+      state.status = 200;
+      state.statusText = "OK";
+      state.readyState = 4;
+      const progressEvent = new ProgressEvent("progress", {lengthComputable: true, loaded: buf.byteLength, total: buf.byteLength});
+      (listeners.progress || []).forEach(function(cb) { try { cb(progressEvent); } catch (e) {} });
+      if (typeof _onprogress === "function") _onprogress(progressEvent);
+      const loadEvent = new Event("load");
+      (listeners.load || []).forEach(function(cb) { try { cb(loadEvent); } catch (e) {} });
+      if (typeof _onload === "function") _onload(loadEvent);
+    })();
+    return undefined;
+  };
+  return api;
+}
+window.XMLHttpRequest = XHRWrapper;
+const assetPromises = ASSETS.map(function(item) {
+  const name = item[0];
+  const count = item[1];
+  return (async function() {
+    const originalUrl = BASE + name;
+    const chunkUrls = Array.from({length: count}, function(_, i) { return BASE + name + String(i).padStart(2, "0"); });
+    const buffers = await Promise.all(chunkUrls.map(async function(u) {
+      const res = await originalFetch(u);
+      if (!res.ok) throw new Error("Failed to load " + u);
+      const buf = await res.arrayBuffer();
+      loadedChunks += 1;
+      setProgress((loadedChunks / totalChunks) * 0.4, "Loading assets");
+      return buf;
+    }));
+    const total = buffers.reduce(function(a, b) { return a + b.byteLength; }, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const b of buffers) { merged.set(new Uint8Array(b), offset); offset += b.byteLength; }
+    assetMap.set(normalize(originalUrl), Promise.resolve(merged.buffer));
+  })();
+});
+setProgress(0, "Loading assets");
+Promise.all(assetPromises).then(function() {
+  setProgress(0.4, "Loading game");
+  window.unityInstance = UnityLoader.instantiate("unityContainer", BASE + "Build/game.json", {onProgress: function(instance, p) {
+    const frac = 0.4 + 0.6 * p;
+    setProgress(frac, p >= 1 ? "Starting" : "Loading game");
+    if (p >= 1) hideLoading();
+  }});
+}).catch(function(e) {
+  setProgress(0, "Failed to load assets");
+  console.error(e);
+});
+</script>
+<script src="Build/UnityLoader.js"></script>
+</head>
+<body>
+<div id="loading">
+  <div id="title">Wobbledogs</div>
+  <div id="barTrack"><div id="barFill"></div></div>
+  <div id="percent">0%</div>
+  <div id="status">Loading assets</div>
+</div>
+<button id="fsBtn" type="button" aria-label="Fullscreen">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+    <path d="M16 3h3a2 2 0 0 0 2 2v3"></path>
+    <path d="M8 21H5a2 2 0 0 0-2-2v-3"></path>
+    <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+  </svg>
+</button>
+<div id="unityContainer"></div>
+<script>
+document.getElementById("fsBtn").addEventListener("click", function() {
+  if (window.unityInstance && typeof window.unityInstance.SetFullscreen === "function") {
+    window.unityInstance.SetFullscreen(1);
+  }
+});
+</script>
+</body>
+</html>
