@@ -17,7 +17,7 @@ html, body {margin: 0; padding: 0; height: 100%; background: #111111; color: #ff
 #fsBtn:hover {background: #2a2a2a;}
 </style>
 <script>
-const BASE = "WobbleDogsWebport/";
+const BASE = "";
 const ASSETS = [["Build/game.data.unityweb", 27], ["Build/game.wasm.code.unityweb", 4]];
 const originalFetch = window.fetch.bind(window);
 const OriginalXHR = window.XMLHttpRequest;
@@ -156,7 +156,7 @@ Promise.all(assetPromises).then(function() {
   console.error(e);
 });
 </script>
-<script src="WobbleDogsWebport/Build/UnityLoader.js"></script>
+<script src="Build/UnityLoader.js"></script>
 </head>
 <body>
 <div id="loading">
